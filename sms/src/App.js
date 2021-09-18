@@ -6,7 +6,6 @@ import './App.css';
 
 function App() {
   const [data, setData] = useState(null);
-
   useEffect(() => {
     const test = axios.get("/api").then(function (res) {
       setData(res.data.message)
