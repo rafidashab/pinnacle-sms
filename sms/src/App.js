@@ -1,22 +1,27 @@
 
 import {useState, useEffect} from 'react';
 import logo from './logo.svg';
+import axios from 'axios';
 import './App.css';
 
 function App() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    fetch("/api")
-      .then((res) => res.json())
-      .then((data) => setData(data.message));
+    const test = axios.get("/api").then(function (res) {
+      setData(res.data.message)
+    })
+    console.log("we", test)
   }, []);
   const [phone, setPhone] = useState("");
   const [wallet, setWallet] = useState("");
 
   const handleSubmit = (evt) => {
       evt.preventDefault();
-      alert(`Submitting Name ${phone} ${wallet}`)
+      const data = { phone: phone, wallet:wallet }
+      console.log(data)
+      const test = axios.post("/api/submit", data) 
+    console.log("sub",test) 
   }
   return (
     <div className="App">
