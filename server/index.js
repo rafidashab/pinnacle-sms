@@ -64,10 +64,10 @@ app.get('/api/sendMessage', (req, res) => {
     .done();
 });
 
-app.post('/api/receiveMessage', async (req, res) => {
+app.post('/api/recieveMessage', async (req, res) => {
   const twiml = new MessagingResponse();
   const body_array = req.body.Body.split(' ');
-  const phone_number = req.body.from;
+  const phone_number = req.body.From;
 
   if (body_array[1] == 'create') {
     const message = twiml.message();
@@ -86,6 +86,7 @@ app.post('/api/receiveMessage', async (req, res) => {
       );
       await response.json();
     } catch (e) {
+      console.log(e);
       message.body('Error please check your command and try again!');
       res.writeHead(200, { 'Content-Type': 'text/xml' });
       res.end(twiml.toString());
@@ -93,18 +94,17 @@ app.post('/api/receiveMessage', async (req, res) => {
 
     // Create user
     try {
-      const privateKey = await encryptSecret(secret, pin);
-      await addUser(phone_number, name, privateKey, publicKey);
+      const privateKey = await encryptSecret(pair.secret(), pin);
+      await addUser(phone_number, name, privateKey, pair.publicKey());
+      message.body('You finally are part of the crypto');
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
     } catch (e) {
+      console.log(e);
       message.body('Error please check your command and try again!');
       res.writeHead(200, { 'Content-Type': 'text/xml' });
       res.end(twiml.toString());
     }
-
-    message.body('You finally are part of the crypto');
-    res.writeHead(200, { 'Content-Type': 'text/xml' });
-    res.end(twiml.toString());
-
   } else if (
     body_array.length < 5 &&
     body_array[0] == 'twiller' &&
