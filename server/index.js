@@ -90,6 +90,12 @@ app.post('/api/recieveMessage', async (req, res) => {
     const pin = body_array[3];
     const name = body_array[4];
 
+    if (pin == null || pin.toString().isNaN || pin.toString().length != 6) {
+      message.body('Error: Invalid pin! Command: oct create account [6 digits PIN] [Nickname]');
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
+    }
+
     // Generate and validate keys
     const pair = StellarSdk.Keypair.random();
     try {
@@ -101,7 +107,7 @@ app.post('/api/recieveMessage', async (req, res) => {
       await response.json();
     } catch (e) {
       console.log(e);
-      message.body('Error please check your command and try again!');
+      message.body('Error: Network error! Please try again in a while.');
       res.writeHead(200, { 'Content-Type': 'text/xml' });
       res.end(twiml.toString());
     }
@@ -110,18 +116,47 @@ app.post('/api/recieveMessage', async (req, res) => {
     try {
       const privateKey = await encryptSecret(pair.secret(), pin);
       await addUser(phone_number, name, privateKey, pair.publicKey());
-      message.body('You finally are part of the crypto');
+      message.body(`Welcome to the Offline Cryptocurrency Transfers System, ${name}.`);
       res.writeHead(200, { 'Content-Type': 'text/xml' });
       res.end(twiml.toString());
     } catch (e) {
       console.log(e);
-      message.body('Error please check your command and try again!');
+      message.body('Error: Network error! Please try again in a while.');
       res.writeHead(200, { 'Content-Type': 'text/xml' });
       res.end(twiml.toString());
     }
   } else if (
+    body_array.length == 2 &&
+    body_array[0] == 'oct' &&
+    body_array[1] == 'balance'
+  ) {
+    const sender_details = await getDetailsFromPhoneNumber(phone_number);
+    const publicKey = sender_details.publicKey;
+    try {
+    const temp_data = await fetch(
+      'https://horizon-testnet.stellar.org/accounts/' +
+      publicKey
+    );
+
+    const temp = await temp_data.json();
+    const current_balance = temp.balances[0].balance;
+
+    message.body(
+      `Current balance for ${sender_details.name}: ${current_balance}.`
+    );
+    res.writeHead(200, { 'Content-Type': 'text/xml' });
+    res.end(twiml.toString());
+  } catch(e) {
+    // If the result is unknown (no response body, timeout etc.) we simply resubmit
+    // already built transaction:
+    // server.submitTransaction(transaction);
+    message.body('Error: An error occured. Please try again.');
+    res.writeHead(200, { 'Content-Type': 'text/xml' });
+    res.end(twiml.toString());
+  }
+  } else if (
     body_array.length == 6 &&
-    body_array[0] == 'twiller' &&
+    body_array[0] == 'oct' &&
     body_array[1] == 'send' &&
     !isNaN(body_array[2]) &&
     body_array[3] == 'to' &&
@@ -136,7 +171,7 @@ app.post('/api/recieveMessage', async (req, res) => {
     const sender_pin = body_array[5];
     const sender_details = await getDetailsFromPhoneNumber(phone_number);
     if (!sender_details) {
-      message.body("You don't have an Stellar account please create one!");
+      message.body("Error: You don't have an account! Use: oct create account [6 digits PIN] [Nickname]");
       res.writeHead(200, { 'Content-Type': 'text/xml' });
       res.end(twiml.toString());
     }
@@ -149,7 +184,7 @@ app.post('/api/recieveMessage', async (req, res) => {
       reciever_phone_number
     );
     if (!reciever_details) {
-      message.body("You don't have an Stellar account please create one!");
+      message.body("Error: You don't have an account! Use: oct create account [6 digits PIN] [Nickname]");
       res.writeHead(200, { 'Content-Type': 'text/xml' });
       res.end(twiml.toString());
     }
@@ -214,28 +249,37 @@ app.post('/api/recieveMessage', async (req, res) => {
 
         const temp = await temp_data.json();
         const current_balance = temp.balances[0].balance;
+
+        const temp_data2 = await fetch(
+          'https://horizon-testnet.stellar.org/accounts/' +
+            result.reciever_public_key
+        );
+
+        const temp2 = await temp_data2.json();
+        const current_balance2 = temp2.balances[0].balance;
+
+        
         sendMessage(
-          `${sender_details.name} send you ${amount_sent} `,
+          `You received ${amount_sent} from ${sender_details.name}. Current balance: ${current_balance2}`,
           reciever_phone_number
         );
         message.body(
-          `Success!! Your money was sent to ${reciever_phone_number} and your current balance is ${current_balance}`
+          `Success! Your money was sent to ${reciever_phone_number} and your current balance is ${current_balance}.`
         );
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
       })
       .catch(function (error) {
-        console.error('Something went wrong!', error);
         // If the result is unknown (no response body, timeout etc.) we simply resubmit
         // already built transaction:
         // server.submitTransaction(transaction);
-        message.body('We could not send the money. Please try again later');
+        message.body('Error: Money not sent. Please try again later.');
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
       });
   } else {
     console.log(body_array);
-    message.body('Error please check your command and try again');
+    message.body('Error: Please check your command and try again');
     res.writeHead(200, { 'Content-Type': 'text/xml' });
     res.end(twiml.toString());
   }
