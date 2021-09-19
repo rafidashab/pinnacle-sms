@@ -3,7 +3,8 @@ import { db } from './firebase';
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
-
+var crypto = require('crypto');
+var argon2 = require('argon2');
 var StellarSdk = require('stellar-sdk');
 const server = new StellarSdk.Server('https://horizon-testnet.stellar.org');
 
@@ -11,23 +12,40 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({ origin: true }));
 
-// Firebase Test
-// const usersDb = db.collection('phone');
-// const rafid = usersDb.doc('1');
-
-// (async () => {
-//   await rafid.set({
-//     first: 'Rafid',
-//   });
-// })();
-
-// get collection
-// (async () => {
-//   const users = await db.collection('users').get();
-// })();
-
 // Routes
 const routes = require('./routes');
+
+// Inspired from Zeeshan Hassan Memon on stackoverflow
+const encryptSecret = async (text, pin) => {
+  const hash = crypto.scryptSync(pin, 'salt', 32);
+  let iv = crypto.randomBytes(16);
+  let cipher = crypto.createCipheriv('aes-256-ctr', Buffer.from(hash, 'hex'), iv);
+  let encrypted = cipher.update(text);
+  encrypted = Buffer.concat([encrypted, cipher.final()]);
+  return iv.toString('hex') + ':' + encrypted.toString('hex');
+};
+
+const decypherSecret = async (text, pin) => { 
+  const hash = crypto.scryptSync(pin, 'salt', 32);
+  let textParts = text.split(':');
+  let iv = Buffer.from(textParts.shift(), 'hex');
+  let encryptedText = Buffer.from(textParts.join(':'), 'hex');
+  let decipher = crypto.createDecipheriv('aes-256-ctr', Buffer.from(hash, 'hex'), iv);
+  let decrypted = decipher.update(encryptedText);
+  decrypted = Buffer.concat([decrypted, decipher.final()]).toString();
+  return decrypted;
+}
+
+const users = db.collection('users');
+
+async function addUser(phone, name, privateKey, publicKey) {  
+  try {
+    await users.doc(phone).set({name: name, secret: privateKey, publicKey: publicKey});
+  } catch (e) {
+    throw e;
+  }
+  return true;
+}
 
 // Twilio
 const accountSid = 'AC2db336d0cad3f0482b3bbf3efbcc6fd3';
@@ -46,7 +64,7 @@ app.get('/api/sendMessage', (req, res) => {
     .done();
 });
 
-app.post('/api/recieveMessage', (req, res) => {
+app.post('/api/receiveMessage', async (req, res) => {
   const twiml = new MessagingResponse();
   const body_array = req.body.Body.split(' ');
   const phone_number = req.body.from;
@@ -54,34 +72,39 @@ app.post('/api/recieveMessage', (req, res) => {
   if (body_array[1] == 'create') {
     const message = twiml.message();
 
-    // Create an account.
-    // Handle logic
+    // TODO: Validate pin and name
+    const pin = body_array[3];
+    const name = body_array[4];
 
-    // create a completely new and unique pair of keys
-    // see more about KeyPair objects: https://stellar.github.io/js-stellar-sdk/Keypair.html
+    // Generate and validate keys
     const pair = StellarSdk.Keypair.random();
+    try {
+      const response = await fetch(
+        `https://friendbot.stellar.org?addr=${encodeURIComponent(
+          pair.publicKey()
+        )}`
+      );
+      await response.json();
+    } catch (e) {
+      message.body('Error please check your command and try again!');
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
+    }
 
-    const secret_key = pair.secret();
-    const public_key = pair.publicKey();
+    // Create user
+    try {
+      const privateKey = await encryptSecret(secret, pin);
+      await addUser(phone_number, name, privateKey, publicKey);
+    } catch (e) {
+      message.body('Error please check your command and try again!');
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
+    }
 
-    (async () => {
-      try {
-        const response = await fetch(
-          `https://friendbot.stellar.org?addr=${encodeURIComponent(
-            pair.publicKey()
-          )}`
-        );
-        const responseJSON = await response.json();
-        message.body('You finally are part of the crypto');
-        res.writeHead(200, { 'Content-Type': 'text/xml' });
-        res.end(twiml.toString());
-      } catch (e) {
-        console.log(e);
-        message.body('Error please check your command and try again');
-        res.writeHead(200, { 'Content-Type': 'text/xml' });
-        res.end(twiml.toString());
-      }
-    })();
+    message.body('You finally are part of the crypto');
+    res.writeHead(200, { 'Content-Type': 'text/xml' });
+    res.end(twiml.toString());
+
   } else if (
     body_array.length < 5 &&
     body_array[0] == 'twiller' &&
