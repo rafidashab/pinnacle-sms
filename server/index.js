@@ -48,7 +48,10 @@ app.get('/api/sendMessage', (req, res) => {
 
 app.post('/api/recieveMessage', (req, res) => {
   const twiml = new MessagingResponse();
-  if (req.body.Body == 'twiller create account') {
+  const body_array = req.body.Body.split(' ');
+  const phone_number = req.body.from;
+
+  if (body_array[1] == 'create') {
     const message = twiml.message();
 
     // Create an account.
@@ -73,16 +76,18 @@ app.post('/api/recieveMessage', (req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
       } catch (e) {
-        message.body('Error please try again');
+        console.log(e);
+        message.body('Error please check your command and try again');
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
       }
     })();
   } else if (
-    (body_array[0] == 'twiller') &
-    (body_array[1] == 'send') &
-    !sNaN(body_array[2]) &
-    (body_array[3] == 'to') &
+    body_array.length < 5 &&
+    body_array[0] == 'twiller' &&
+    body_array[1] == 'send' &&
+    !sNaN(body_array[2]) &&
+    body_array[3] == 'to' &&
     regex.test(body_array[4])
   ) {
     // Stellar Transaction
@@ -94,7 +99,8 @@ app.post('/api/recieveMessage', (req, res) => {
     );
 
     //Get it from firebase based on the given phone number
-    var destinationId = 'GCCFSH4N6BFMN3NBILKWHYRMMSRSMVPBABHHTXYJJUWCCUUHJTOLVTUU';
+    var destinationId =
+      'GCCFSH4N6BFMN3NBILKWHYRMMSRSMVPBABHHTXYJJUWCCUUHJTOLVTUU';
 
     // Transaction will hold a built transaction we can resubmit if the result is unknown.
     var transaction;
@@ -141,14 +147,23 @@ app.post('/api/recieveMessage', (req, res) => {
         return server.submitTransaction(transaction);
       })
       .then(function (result) {
-        console.log('Success! Results:', result);
+        message.body('Success!! You sent your friend money');
+        res.writeHead(200, { 'Content-Type': 'text/xml' });
+        res.end(twiml.toString());
       })
       .catch(function (error) {
         console.error('Something went wrong!', error);
         // If the result is unknown (no response body, timeout etc.) we simply resubmit
         // already built transaction:
         // server.submitTransaction(transaction);
+        message.body('Error please check your command and try again');
+        res.writeHead(200, { 'Content-Type': 'text/xml' });
+        res.end(twiml.toString());
       });
+  } else {
+    message.body('Error please check your command and try again');
+    res.writeHead(200, { 'Content-Type': 'text/xml' });
+    res.end(twiml.toString());
   }
 });
 
