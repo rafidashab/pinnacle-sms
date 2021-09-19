@@ -73,7 +73,6 @@ app.post('/api/recieveMessage', (req, res) => {
     // Stellar Transaction
     var server = new StellarSdk.Server('https://horizon-testnet.stellar.org');
 
-    
     //Get it from firebase based on the sender's phone number
     var sourceKeys = StellarSdk.Keypair.fromSecret(
       'SB5LGTNFX3X34FCP2PXSS6KD5KZ36LRXHWP6BYU5E3R32MC7M5QHMIKH'
@@ -129,8 +128,10 @@ app.post('/api/recieveMessage', (req, res) => {
       })
       .then(function (result) {
         //Send the sender a message upon transaction success
-        sendMessage('Leo sent you money', '+12368676110')
-        message.body('Success!! Your money was sent to XXX and your current balance is XXX');
+        sendMessage('Rafid send you money', '+17789260040');
+        message.body(
+          'Success!! Your money was sent to Leo and your current balance is XXX'
+        );
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
       })
