@@ -1,8 +1,6 @@
 // server/index.js
 // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { database, ref, set } from "firebase/database";
+var admin = require('firebase-admin');
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -17,11 +15,11 @@ const firebaseConfig = {
   appId: "1:91844678856:web:e142989d731df9e18b81fd",
   measurementId: "G-JG3V7MZ5FJ"
 };
-
-// Initialize Firebase
-const app1 = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app1);
-const database = database();
+admin.initializeApp({
+  credential: admin.credential.applicationDefault(),
+  databaseURL: 'https://pinnacle.firebaseio.com'
+});
+const app = admin.initializeApp();
 const routes = require("./routes")
 const express = require("express");
 
@@ -39,7 +37,6 @@ app.use(
 
 
 app.use("/api/", routes);
-const PORT = process.env.PORT || 3003;
 
 app.get('/api/sendMessage', (req, res) => {
   client.messages

@@ -10,16 +10,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-<<<<<<< HEAD
     "axios": "^0.21.4",
     "body-parser": "^1.19.0",
     "express": "^4.17.1",
-    "firebase": "^9.0.2"
-=======
-    "express": "^4.17.1",
+    "firebase": "^9.0.2",
+    "firebase-admin": "^9.11.1",
     "ngrok": "^4.2.2",
+    "node": "^16.9.1",
     "nodemon": "^2.0.12",
     "twilio": "^3.67.2"
->>>>>>> c33c4bf699e72b3ff4d769c2147f2a9aef64bfc1
   }
 }
