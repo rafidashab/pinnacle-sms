@@ -146,11 +146,39 @@ app.get('/api/sendMessage', (req, res) => {
 
 app.post('/api/recieveMessage', (req, res) => {
   const twiml = new MessagingResponse();
-  if (req.body.Body == 'hello') {
+  if (req.body.Body == 'twiller create account') {
     const message = twiml.message();
-    message.body('Shut the hell up');
-    res.writeHead(200, { 'Content-Type': 'text/xml' });
-    res.end(twiml.toString());
+
+    // Create an account.
+    // Handle logic
+
+    // create a completely new and unique pair of keys
+    // see more about KeyPair objects: https://stellar.github.io/js-stellar-sdk/Keypair.html
+    const pair = StellarSdk.Keypair.random();
+
+    const secret_key = pair.secret();
+    const public_key = pair.publicKey();
+
+    (async () => {
+      try {
+        const response = await fetch(
+          `https://friendbot.stellar.org?addr=${encodeURIComponent(
+            pair.publicKey()
+          )}`
+        );
+        const responseJSON = await response.json();
+        message.body('You finally are part of the crypto');
+        res.writeHead(200, { 'Content-Type': 'text/xml' });
+        res.end(twiml.toString());
+      } catch (e) {
+        message.body('Error please try again');
+        res.writeHead(200, { 'Content-Type': 'text/xml' });
+        res.end(twiml.toString());
+      }
+    })();
+  }
+
+  if (req.body.Body == 'twiller send account') {
   }
 });
 
