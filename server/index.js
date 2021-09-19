@@ -57,6 +57,15 @@ async function addUser(phone, name, privateKey, publicKey) {
   return true;
 }
 
+async function getDetailsFromPhoneNumber(phone) {
+  try {
+    let userDocRef = await users.doc(phone).get();
+    return userDocRef.data();
+  } catch (e) {
+    return false;
+  }
+}
+
 // Twilio
 const accountSid = 'AC2db336d0cad3f0482b3bbf3efbcc6fd3';
 const authToken = 'c6cf26e1fc073d1ae8db416124944fce';
@@ -76,7 +85,7 @@ app.post('/api/recieveMessage', async (req, res) => {
   const body_array = req.body.Body.split(' ');
   const phone_number = req.body.From;
   const message = twiml.message();
-  if (body_array[1] == 'create') {
+  if (body_array.length == 5 && body_array[1] == 'create') {
     // TODO: Validate pin and name
     const pin = body_array[3];
     const name = body_array[4];
@@ -111,23 +120,45 @@ app.post('/api/recieveMessage', async (req, res) => {
       res.end(twiml.toString());
     }
   } else if (
-    body_array.length < 6 &&
+    body_array.length == 6 &&
     body_array[0] == 'twiller' &&
     body_array[1] == 'send' &&
     !isNaN(body_array[2]) &&
-    body_array[3] == 'to'
+    body_array[3] == 'to' &&
+    body_array[5] != ''
   ) {
     // Stellar Transaction
     var server = new StellarSdk.Server('https://horizon-testnet.stellar.org');
 
     //Get it from firebase based on the sender's phone number
-    var sourceKeys = StellarSdk.Keypair.fromSecret(
-      'SB5LGTNFX3X34FCP2PXSS6KD5KZ36LRXHWP6BYU5E3R32MC7M5QHMIKH'
+    const amount_sent = body_array[2];
+    const reciever_phone_number = body_array[4];
+    const sender_pin = body_array[5];
+    const sender_details = await getDetailsFromPhoneNumber(phone_number);
+    if (!sender_details) {
+      message.body("You don't have an Stellar account please create one!");
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
+    }
+    const sender_public_key = sender_details.publicKey;
+    const sender_private_key = await decypherSecret(
+      sender_details.secret,
+      sender_pin
     );
+    const reciever_details = await getDetailsFromPhoneNumber(
+      reciever_phone_number
+    );
+    if (!reciever_details) {
+      message.body("You don't have an Stellar account please create one!");
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
+    }
+    const reciever_public_key = reciever_details.publicKey;
+
+    var sourceKeys = StellarSdk.Keypair.fromSecret(sender_private_key);
 
     //Get it from firebase based on the given phone number
-    var destinationId =
-      'GCCFSH4N6BFMN3NBILKWHYRMMSRSMVPBABHHTXYJJUWCCUUHJTOLVTUU';
+    var destinationId = reciever_public_key;
 
     // Transaction will hold a built transaction we can resubmit if the result is unknown.
     var transaction;
@@ -159,7 +190,7 @@ app.post('/api/recieveMessage', async (req, res) => {
               // Because Stellar allows transaction in many currencies, you must
               // specify the asset type. The special "native" asset represents Lumens.
               asset: StellarSdk.Asset.native(),
-              amount: '10',
+              amount: amount_sent,
             })
           )
           // A memo allows you to add your own metadata to a transaction. It's
@@ -173,11 +204,22 @@ app.post('/api/recieveMessage', async (req, res) => {
         // And finally, send it off to Stellar!
         return server.submitTransaction(transaction);
       })
-      .then(function (result) {
+      .then(async function (result) {
         //Send the sender a message upon transaction success
-        sendMessage('Rafid send you money', '+17789260040');
+
+        const temp_data = await fetch(
+          'https://horizon-testnet.stellar.org/accounts/' +
+            result.source_account
+        );
+
+        const temp = await temp_data.json();
+        const current_balance = temp.balances[0].balance;
+        sendMessage(
+          `${sender_details.name} send you ${amount_sent} `,
+          reciever_phone_number
+        );
         message.body(
-          'Success!! Your money was sent to Leo and your current balance is XXX'
+          `Success!! Your money was sent to ${reciever_phone_number} and your current balance is ${current_balance}`
         );
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
