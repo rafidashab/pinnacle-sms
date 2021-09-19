@@ -3,7 +3,8 @@ import { db } from './firebase';
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
-
+var crypto = require('crypto');
+var argon2 = require('argon2');
 var StellarSdk = require('stellar-sdk');
 const server = new StellarSdk.Server('https://horizon-testnet.stellar.org');
 
@@ -14,6 +15,48 @@ app.use(cors({ origin: true }));
 // Routes
 const routes = require('./routes');
 
+// Inspired from Zeeshan Hassan Memon on stackoverflow
+const encryptSecret = async (text, pin) => {
+  const hash = crypto.scryptSync(pin, 'salt', 32);
+  let iv = crypto.randomBytes(16);
+  let cipher = crypto.createCipheriv(
+    'aes-256-ctr',
+    Buffer.from(hash, 'hex'),
+    iv
+  );
+  let encrypted = cipher.update(text);
+  encrypted = Buffer.concat([encrypted, cipher.final()]);
+  return iv.toString('hex') + ':' + encrypted.toString('hex');
+};
+
+const decypherSecret = async (text, pin) => {
+  const hash = crypto.scryptSync(pin, 'salt', 32);
+  let textParts = text.split(':');
+  let iv = Buffer.from(textParts.shift(), 'hex');
+  let encryptedText = Buffer.from(textParts.join(':'), 'hex');
+  let decipher = crypto.createDecipheriv(
+    'aes-256-ctr',
+    Buffer.from(hash, 'hex'),
+    iv
+  );
+  let decrypted = decipher.update(encryptedText);
+  decrypted = Buffer.concat([decrypted, decipher.final()]).toString();
+  return decrypted;
+};
+
+const users = db.collection('users');
+
+async function addUser(phone, name, privateKey, publicKey) {
+  try {
+    await users
+      .doc(phone)
+      .set({ name: name, secret: privateKey, publicKey: publicKey });
+  } catch (e) {
+    throw e;
+  }
+  return true;
+}
+
 // Twilio
 const accountSid = 'AC2db336d0cad3f0482b3bbf3efbcc6fd3';
 const authToken = 'c6cf26e1fc073d1ae8db416124944fce';
@@ -21,48 +64,52 @@ const client = require('twilio')(accountSid, authToken);
 const MessagingResponse = require('twilio').twiml.MessagingResponse;
 
 function sendMessage(body, to) {
-  client.messages
-    .create({
-      body: body,
-      messagingServiceSid: 'MGd82b096e04a0f637f37d18e8575cd9d2',
-      to: to,
-    })
+  client.messages.create({
+    body: body,
+    messagingServiceSid: 'MGd82b096e04a0f637f37d18e8575cd9d2',
+    to: to,
+  });
 }
 
-app.post('/api/recieveMessage', (req, res) => {
+app.post('/api/recieveMessage', async (req, res) => {
   const twiml = new MessagingResponse();
   const body_array = req.body.Body.split(' ');
-  const phone_number = req.body.from;
+  const phone_number = req.body.From;
   const message = twiml.message();
   if (body_array[1] == 'create') {
-    // Create an account.
-    // Handle logic
+    // TODO: Validate pin and name
+    const pin = body_array[3];
+    const name = body_array[4];
 
-    // create a completely new and unique pair of keys
-    // see more about KeyPair objects: https://stellar.github.io/js-stellar-sdk/Keypair.html
+    // Generate and validate keys
     const pair = StellarSdk.Keypair.random();
+    try {
+      const response = await fetch(
+        `https://friendbot.stellar.org?addr=${encodeURIComponent(
+          pair.publicKey()
+        )}`
+      );
+      await response.json();
+    } catch (e) {
+      console.log(e);
+      message.body('Error please check your command and try again!');
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
+    }
 
-    const secret_key = pair.secret();
-    const public_key = pair.publicKey();
-
-    (async () => {
-      try {
-        const response = await fetch(
-          `https://friendbot.stellar.org?addr=${encodeURIComponent(
-            pair.publicKey()
-          )}`
-        );
-        const responseJSON = await response.json();
-        message.body('You finally are part of the crypto');
-        res.writeHead(200, { 'Content-Type': 'text/xml' });
-        res.end(twiml.toString());
-      } catch (e) {
-        console.log(e);
-        message.body('The account could not be created. Please try again');
-        res.writeHead(200, { 'Content-Type': 'text/xml' });
-        res.end(twiml.toString());
-      }
-    })();
+    // Create user
+    try {
+      const privateKey = await encryptSecret(pair.secret(), pin);
+      await addUser(phone_number, name, privateKey, pair.publicKey());
+      message.body('You finally are part of the crypto');
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
+    } catch (e) {
+      console.log(e);
+      message.body('Error please check your command and try again!');
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
+    }
   } else if (
     body_array.length < 6 &&
     body_array[0] == 'twiller' &&
