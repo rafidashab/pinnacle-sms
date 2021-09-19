@@ -1,42 +1,35 @@
-// server/index.js
-// Import the functions you need from the SDKs you need
-var admin = require('firebase-admin');
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+// Express Server Settings
+import { db } from './firebase';
+const express = require('express');
+const cors = require('cors');
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyCCeY6KmK0Oho9kADIr0tkJrrFM4jYY2eI",
-  authDomain: "pinnacle-sms.firebaseapp.com",
-  projectId: "pinnacle-sms",
-  storageBucket: "pinnacle-sms.appspot.com",
-  messagingSenderId: "91844678856",
-  appId: "1:91844678856:web:e142989d731df9e18b81fd",
-  measurementId: "G-JG3V7MZ5FJ"
-};
-admin.initializeApp({
-  credential: admin.credential.applicationDefault(),
-  databaseURL: 'https://pinnacle.firebaseio.com'
-});
-const app = admin.initializeApp();
-const routes = require("./routes")
-const express = require("express");
+const app = express();
+app.use(express.urlencoded({ extended: true }));
+app.use(cors({ origin: true }));
 
+// Firebase Test
+// const usersDb = db.collection('phone');
+// const rafid = usersDb.doc('1');
+
+// (async () => {
+//   await rafid.set({
+//     first: 'Rafid',
+//   });
+// })();
+
+// get collection
+// (async () => {
+//   const users = await db.collection('users').get();
+// })();
+
+// Routes
+const routes = require('./routes');
+
+// Twilio
 const accountSid = 'AC2db336d0cad3f0482b3bbf3efbcc6fd3';
 const authToken = 'c6cf26e1fc073d1ae8db416124944fce';
 const client = require('twilio')(accountSid, authToken);
 const MessagingResponse = require('twilio').twiml.MessagingResponse;
-
-const app = express();
-app.use(
-  express.urlencoded({
-    extended: true,
-  })
-);
-
-
-app.use("/api/", routes);
 
 app.get('/api/sendMessage', (req, res) => {
   client.messages
