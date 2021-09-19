@@ -11,21 +11,6 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({ origin: true }));
 
-// Firebase Test
-// const usersDb = db.collection('phone');
-// const rafid = usersDb.doc('1');
-
-// (async () => {
-//   await rafid.set({
-//     first: 'Rafid',
-//   });
-// })();
-
-// get collection
-// (async () => {
-//   const users = await db.collection('users').get();
-// })();
-
 // Routes
 const routes = require('./routes');
 
@@ -35,25 +20,21 @@ const authToken = 'c6cf26e1fc073d1ae8db416124944fce';
 const client = require('twilio')(accountSid, authToken);
 const MessagingResponse = require('twilio').twiml.MessagingResponse;
 
-app.get('/api/sendMessage', (req, res) => {
+function sendMessage(body, to) {
   client.messages
     .create({
-      body: 'This is a test',
+      body: body,
       messagingServiceSid: 'MGd82b096e04a0f637f37d18e8575cd9d2',
-      to: '+12368676110',
+      to: to,
     })
-    .then((message) => res.json(message))
-    .done();
-});
+}
 
 app.post('/api/recieveMessage', (req, res) => {
   const twiml = new MessagingResponse();
   const body_array = req.body.Body.split(' ');
   const phone_number = req.body.from;
-
+  const message = twiml.message();
   if (body_array[1] == 'create') {
-    const message = twiml.message();
-
     // Create an account.
     // Handle logic
 
@@ -77,22 +58,22 @@ app.post('/api/recieveMessage', (req, res) => {
         res.end(twiml.toString());
       } catch (e) {
         console.log(e);
-        message.body('Error please check your command and try again');
+        message.body('The account could not be created. Please try again');
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
       }
     })();
   } else if (
-    body_array.length < 5 &&
+    body_array.length < 6 &&
     body_array[0] == 'twiller' &&
     body_array[1] == 'send' &&
-    !sNaN(body_array[2]) &&
-    body_array[3] == 'to' &&
-    regex.test(body_array[4])
+    !isNaN(body_array[2]) &&
+    body_array[3] == 'to'
   ) {
     // Stellar Transaction
     var server = new StellarSdk.Server('https://horizon-testnet.stellar.org');
 
+    
     //Get it from firebase based on the sender's phone number
     var sourceKeys = StellarSdk.Keypair.fromSecret(
       'SB5LGTNFX3X34FCP2PXSS6KD5KZ36LRXHWP6BYU5E3R32MC7M5QHMIKH'
@@ -147,7 +128,9 @@ app.post('/api/recieveMessage', (req, res) => {
         return server.submitTransaction(transaction);
       })
       .then(function (result) {
-        message.body('Success!! You sent your friend money');
+        //Send the sender a message upon transaction success
+        sendMessage('Leo sent you money', '+12368676110')
+        message.body('Success!! Your money was sent to XXX and your current balance is XXX');
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
       })
@@ -156,11 +139,12 @@ app.post('/api/recieveMessage', (req, res) => {
         // If the result is unknown (no response body, timeout etc.) we simply resubmit
         // already built transaction:
         // server.submitTransaction(transaction);
-        message.body('Error please check your command and try again');
+        message.body('We could not send the money. Please try again later');
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
       });
   } else {
+    console.log(body_array);
     message.body('Error please check your command and try again');
     res.writeHead(200, { 'Content-Type': 'text/xml' });
     res.end(twiml.toString());
